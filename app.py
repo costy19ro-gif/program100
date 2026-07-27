@@ -1,18 +1,5 @@
 """
 BetMachine / Miliardarul — aplicatie unificata
-=================================================
-Doua motoare, un singur loc:
-
-  1. "Motor Poisson (Miliardarul)" — pipeline.py: Decay + Shrinkage Bayesian +
-     reconciliere lambda/mu + Dixon-Coles + scanner de piete, pe date reale
-     din API-Football (via data_source.py). Asta e sursa principala.
-
-  2. "Model rapid (RandomForest)" — semnal ML secundar, antrenat pe
-     model_1x2.joblib. Foloseste-l doar ca a doua parere, nu ca sursa
-     principala: are nevoie de statistici per meci (xG, sut-uri, cornere)
-     pe care API-ul gratuit nu le da mereu.
-
-Ruleaza cu: streamlit run app.py
 """
 
 from __future__ import annotations
@@ -28,16 +15,6 @@ from pipeline import analizeaza_meci
 
 
 def construieste_tablou_decizie(piete: dict, prag_da: float = 1.30):
-    """
-    Tablou Decizie Combo — regulile lui Julien:
-    - cota corecta = 1 / probabilitate
-    - o piata e "DA" daca cota corecta <= prag_da
-    - verifica INTAI piata '12' (fara egal): daca trece pragul, o prefera
-      fata de 1X/X2 (care sunt excluse din combo, ca sa nu fie redundante
-      cu '12' — 1X si X2 se suprapun partial cu ea)
-
-    Intoarce: (dataframe pt. afisare, lista piete DA, dict cota per piata)
-    """
     cota = {nume: (1 / prob if prob > 0 else float("inf")) for nume, prob in piete.items()}
 
     prefera_12 = cota.get("12", float("inf")) <= prag_da
@@ -71,15 +48,11 @@ tab_poisson, tab_rapid, tab_scanner, tab_despre = st.tabs([
 ])
 
 # ═══════════════════════════════════════════════════════════════════════
-# TAB 1 — MOTORUL PRINCIPAL: Poisson + Dixon-Coles, date reale
+# TAB 1 — MOTORUL PRINCIPAL
 # ═══════════════════════════════════════════════════════════════════════
 with tab_poisson:
     st.subheader("1. Alege liga")
-    st.caption(
-        "Un singur apel incarca tot sezonul unei ligi (cache 6h) — economisim "
-        "cota gratuita. Istoricul fiecarei echipe se calculeaza local, din "
-        "aceleasi date, fara apeluri suplimentare."
-    )
+    st.caption("Un singur apel incarca tot sezonul unei ligi (cache 6h).")
 
     if st.button("🌍 Incarca lista de tari si ligi", key="btn_ligi"):
         try:
@@ -96,20 +69,13 @@ with tab_poisson:
                 eticheta = f"{tara.get('name', '?')} — {liga.get('name', '?')}"
                 optiuni_liga[eticheta] = liga.get("id")
 
-        filtru = st.text_input(
-            "🔍 Filtreaza dupa nume (tara sau liga)", "",
-            key="filtru_liga",
-            placeholder="ex: Europa, Argentina, Romania...",
-        )
+        filtru = st.text_input("🔍 Filtreaza dupa nume (tara sau liga)", "", key="filtru_liga")
         chei_filtrate = sorted(
             k for k in optiuni_liga if filtru.lower() in k.lower()
         ) if filtru else sorted(optiuni_liga.keys())
 
         if not chei_filtrate:
-            st.warning(f"Nimic gasit pentru '{filtru}'. Incearca alt termen — "
-                       f"unele competitii (ex. cele UEFA) pot fi listate sub "
-                       f"'Europe'/'International' in loc de numele lor, iar "
-                       f"ligile foarte mici s-ar putea sa nu fie in acest API gratuit.")
+            st.warning(f"Nimic gasit pentru '{filtru}'.")
             league_id = None
         else:
             eticheta_aleasa = st.selectbox("Liga", chei_filtrate, key="select_liga")
@@ -162,14 +128,8 @@ with tab_poisson:
                         meciuri_liga, echipe[oaspete_nume], n_meciuri_istoric
                     )
 
-                    if len(istoric_gazda) < 3 or len(istoric_oaspete) < 3:
-                        st.warning(
-                            "Prea putine meciuri istorice gasite pentru una din echipe "
-                            "(sub 3) — rezultatul poate fi nesigur."
-                        )
-
                     if len(istoric_gazda) < 1 or len(istoric_oaspete) < 1:
-                        st.error("Nu exista destule meciuri terminate pentru aceste echipe in datele incarcate.")
+                        st.error("Nu exista destule meciuri terminate pentru aceste echipe.")
                     else:
                         rezultat = analizeaza_meci(
                             istoric_gazda, istoric_oaspete,
@@ -189,7 +149,7 @@ with tab_poisson:
         c1.metric("λ (goluri asteptate gazde)", f"{rec['lambda_gazde']:.2f}")
         c2.metric("μ (goluri asteptate oaspeti)", f"{rec['mu_oaspeti']:.2f}")
 
-        st.markdown("#### Piete (probabilitate reala, din matricea de scor)")
+        st.markdown("#### Piete (probabilitate reala)")
         piete = rezultat["piete"]
         df_piete = pd.DataFrame([
             {"Piata": k, "Probabilitate": f"{v:.1%}", "Cota corecta": f"{(1 / v):.2f}" if v > 0 else "—"}
@@ -198,12 +158,7 @@ with tab_poisson:
         st.dataframe(df_piete, use_container_width=True, hide_index=True)
 
         st.markdown("#### 🎯 Tablou Decizie Combo")
-        prag_da = st.slider(
-            "Prag DA (cota corecta maxima)", 1.05, 2.00, 1.30, 0.01,
-            key="prag_da",
-            help="O piata e marcata DA daca 1/probabilitate <= acest prag. "
-                 "'12' e verificata prima — daca trece pragul, inlocuieste 1X/X2 in combo.",
-        )
+        prag_da = st.slider("Prag DA (cota corecta maxima)", 1.05, 2.00, 1.30, 0.01, key="prag_da")
         df_decizie, piete_da, cota_map = construieste_tablou_decizie(piete, prag_da)
         st.dataframe(df_decizie, use_container_width=True, hide_index=True)
 
@@ -211,54 +166,14 @@ with tab_poisson:
             cota_combo = 1.0
             for p in piete_da:
                 cota_combo *= cota_map[p]
-            st.success(
-                f"**Combo CREMA** ({' + '.join(piete_da)}) — "
-                f"cota combinata: **{cota_combo:.2f}**"
-            )
-        else:
-            st.info("Nicio piata nu trece pragul DA la acest prag ales.")
-
-        st.markdown("#### Top 5 scoruri probabile")
-        df_scoruri = pd.DataFrame(
-            [{"Scor": f"{h}-{a}", "Probabilitate": f"{p:.1%}"} for h, a, p in rezultat["top_scoruri"]]
-        )
-        st.dataframe(df_scoruri, use_container_width=True, hide_index=True)
-
-    st.divider()
-    with st.expander("📅 Meciurile de azi (informativ, separat de motorul Poisson)"):
-        st.caption(
-            "Foloseste alt sistem de ID-uri decat cel de mai sus, deci nu se "
-            "poate lega automat de analiza pe liga."
-        )
-        if st.button("Incarca meciurile de azi", key="btn_meciuri_azi"):
-            try:
-                with st.spinner("Se incarca..."):
-                    st.session_state["meciuri_azi"] = data_source.meciuri_azi()
-            except RuntimeError as e:
-                st.error(str(e))
-        meciuri_azi = st.session_state.get("meciuri_azi", [])
-        if meciuri_azi:
-            st.dataframe(
-                pd.DataFrame(meciuri_azi)[["fixture_id", "echipa_gazda", "echipa_oaspete", "scor", "status"]],
-                use_container_width=True,
-            )
-
-    st.caption(
-        "Sursa principala de adevar: pipeline.py (Decay + Shrinkage + Dixon-Coles). "
-        "Nu foloseste date inventate — doar istoricul real venit din API."
-    )
+            st.success(f"**Combo CREMA** ({' + '.join(piete_da)}) — cota combinata: **{cota_combo:.2f}**")
 
 # ═══════════════════════════════════════════════════════════════════════
-# TAB 2 — MODEL RAPID: RandomForest + cote de pe piata (semnal secundar)
+# TAB 2 — MODEL RAPID
 # ═══════════════════════════════════════════════════════════════════════
 with tab_rapid:
     st.subheader("Model rapid — cote + RandomForest")
-    st.warning(
-        "⚠️ Acest tab e un semnal SECUNDAR. Modelul a fost antrenat pe statistici "
-        "reale per meci (xG, sut-uri, cornere) — daca nu ai acele date pentru "
-        "meciul curent, nu inventa valori default; foloseste doar motorul Poisson din primul tab."
-    )
-
+    
     @st.cache_resource
     def incarca_model_1x2():
         try:
@@ -278,9 +193,6 @@ with tab_rapid:
         "league_strength",
     ]
 
-    st.markdown("#### Introdu statisticile reale ale meciului")
-    st.caption("Fara valori inventate — completeaza doar ce ai confirmat (ex. din /fixtures/statistics).")
-
     cols = st.columns(3)
     valori = {}
     for i, feat in enumerate(FEATURES_1X2):
@@ -293,76 +205,28 @@ with tab_rapid:
     if st.button("🎯 Ruleaza modelul"):
         lipsesc = [f for f, v in valori.items() if v is None]
         if lipsesc:
-            st.error(f"Lipsesc valori pentru: {', '.join(lipsesc)}. Nu completez automat cu date inventate.")
-        elif model_1x2 is None:
-            st.error("Modelul nu e incarcat.")
-        else:
+            st.error(f"Lipsesc valori pentru: {', '.join(lipsesc)}.")
+        elif model_1x2 is not None:
             X = [[valori[f] for f in FEATURES_1X2]]
             pred = model_1x2.predict(X)[0]
             proba = model_1x2.predict_proba(X)[0]
 
-            inv = 1 / odd_1 + 1 / odd_X + 1 / odd_2
-            prob_piata = {"1": (1 / odd_1) / inv, "X": (1 / odd_X) / inv, "2": (1 / odd_2) / inv}
-
             st.markdown(f"**Predictie model:** {['1', 'X', '2'][pred]}")
-            df_comp = pd.DataFrame({
-                "Rezultat": ["1", "X", "2"],
-                "Probabilitate model": [f"{p:.1%}" for p in proba],
-                "Probabilitate piata (din cote)": [f"{prob_piata[k]:.1%}" for k in ["1", "X", "2"]],
-                "Cota": [odd_1, odd_X, odd_2],
-            })
-            st.dataframe(df_comp, use_container_width=True, hide_index=True)
 
 # ═══════════════════════════════════════════════════════════════════════
-# TAB 3 — SCANNER AUTOMAT DE BILETE
+# TAB 3 — SCANNER AUTOMAT DE BILETE (ACTUALIZAT)
 # ═══════════════════════════════════════════════════════════════════════
 with tab_scanner:
     st.subheader("Scanner automat de bilete")
     st.caption(
-        "Cauta meciuri viitoare din doua surse (RapidAPI + football-data.org), "
-        "ruleaza motorul Poisson pe fiecare, si construieste automat categoriile "
-        "de bilet. **Limitare reala:** forma fiecarei echipe se calculeaza doar "
-        "din meciurile aceleiasi competitii/sezon. Prima repriza nu e folosita "
-        "inca — categoria a fost eliminata din bilet."
-    )
-    st.caption(
-        "⚠️ In perioada de vara, ligile mari din Europa de obicei nu au meciuri "
-        "programate (pauza intre sezoane) — '0 meciuri gasite' poate fi normal."
+        "Scaneaza meciurile pe intervale de date si construieste automat categoriile de bilet."
     )
 
-    st.markdown("#### Sursa 1 — RapidAPI (ligi mici/mijlocii + Liga I)")
-    if st.button("🌍 Incarca lista de ligi RapidAPI", key="btn_ligi_scanner"):
-        try:
-            with st.spinner("Se incarca lista de ligi..."):
-                st.session_state["ligi"] = data_source.leagues_cu_tari()
-        except RuntimeError as e:
-            st.error(str(e))
+    st.markdown("#### Sursa 1 — RapidAPI (Scanare automata pe intervale de date)")
+    foloseste_rapidapi = st.checkbox("Include RapidAPI (toate ligile, scanat pe date)", value=True, key="cb_rapidapi")
+    zile_istoric_rapidapi = st.slider("Zile de istoric in urma (RapidAPI)", 10, 60, 30, key="zile_istoric_rapidapi")
 
-    ligi = st.session_state.get("ligi", [])
-    optiuni_liga = {}
-    ligi_alese = []
-    if not ligi:
-        st.info("Apasa butonul de mai sus daca vrei sa incluzi ligi RapidAPI (opțional).")
-    else:
-        for tara in ligi:
-            for liga in tara.get("leagues", []):
-                eticheta = f"{tara.get('name', '?')} — {liga.get('name', '?')}"
-                optiuni_liga[eticheta] = liga.get("id")
-
-        LIGI_IMPLICITE = [("Romania", "Liga I")]
-        implicite = [
-            f"{tara.get('name')} — {liga.get('name')}"
-            for tara in ligi for liga in tara.get("leagues", [])
-            for tara_tinta, liga_tinta in LIGI_IMPLICITE
-            if tara.get("name") == tara_tinta and liga.get("name") == liga_tinta
-        ]
-
-        ligi_alese = st.multiselect(
-            "Ligi RapidAPI", sorted(optiuni_liga.keys()),
-            default=implicite, key="ligi_scanare",
-        )
-
-    st.markdown("#### Sursa 2 — football-data.org (ligi mari, meciuri viitoare corect marcate)")
+    st.markdown("#### Sursa 2 — football-data.org (ligi mari)")
     competitii_alese = st.multiselect(
         "Competiții football-data.org",
         list(fdo.COMPETITII_GRATUITE.keys()),
@@ -373,34 +237,11 @@ with tab_scanner:
 
     zile = st.slider("Cate zile inainte?", 1, 14, 7, key="zile_scanare")
 
-    surse = [("rapidapi", optiuni_liga[k]) for k in ligi_alese] + \
-            [("football_data", cod) for cod in competitii_alese]
-
-    if st.button("🔍 Verifica ce surse (din cele alese) au meciuri active", key="btn_verifica_ligi"):
-        if not surse:
-            st.error("Alege cel putin o liga sau o competiție.")
-        else:
-            with st.spinner("Verific fiecare sursa..."):
-                verificare = scanner.verifica_ligi_active(surse, zile_inainte=zile)
-            id_catre_eticheta = {v: k for k, v in optiuni_liga.items()}
-            randuri = []
-            for r in verificare:
-                nume = (
-                    id_catre_eticheta.get(r["id"], str(r["id"]))
-                    if r["tip"] == "rapidapi"
-                    else fdo.COMPETITII_GRATUITE.get(r["id"], r["id"])
-                )
-                randuri.append({
-                    "Sursa": "RapidAPI" if r["tip"] == "rapidapi" else "football-data.org",
-                    "Liga/Competiție": nume,
-                    "Meciuri viitoare": r["meciuri_viitoare"] if r["eroare"] is None else "eroare",
-                    "Detaliu eroare": r["eroare"] or "",
-                })
-            df_verificare = pd.DataFrame(randuri).sort_values(
-                "Meciuri viitoare", ascending=False,
-                key=lambda s: s.map(lambda v: v if isinstance(v, int) else -1),
-            )
-            st.dataframe(df_verificare, use_container_width=True, hide_index=True)
+    surse = []
+    if foloseste_rapidapi:
+        surse.append(("rapidapi", "all"))
+    for cod in competitii_alese:
+        surse.append(("football_data", cod))
 
     col_min, col_max = st.columns(2)
     cota_min = col_min.number_input("Cota minima (categoria Sigur)", 1.01, 3.00, 1.30, 0.01)
@@ -408,30 +249,31 @@ with tab_scanner:
 
     if st.button("🎰 Scaneaza și construiește biletele", type="primary"):
         if not surse:
-            st.error("Alege cel putin o liga sau o competiție.")
+            st.error("Alege cel putin o sursa.")
         else:
-            bara = st.progress(0.0, text="Scanez sursele...")
+            bara = st.progress(0.0, text="Scanez...")
 
             def _progres(i, total, ident):
                 bara.progress((i + 1) / total, text=f"Scanez {i + 1}/{total}: {ident}...")
 
-            candidati = scanner.scaneaza(surse, zile_inainte=zile, progres_callback=_progres)
+            candidati = scanner.scaneaza(
+                surse,
+                zile_inainte=zile,
+                zile_istoric=zile_istoric_rapidapi,
+                progres_callback=_progres,
+            )
             bara.empty()
             st.session_state["bilete"] = scanner.construieste_bilete(
                 candidati, cota_min_sigur=cota_min, cota_max_sigur=cota_max
             )
-            st.session_state["nr_candidati"] = len(candidati)
-            st.success(
-                f"Am gasit {len(candidati)} meciuri viitoare cu istoric suficient, "
-                f"din {len(surse)} surse scanate."
-            )
+            st.success(f"Am gasit {len(candidati)} meciuri viitoare analizabile.")
 
     bilete = st.session_state.get("bilete")
     if bilete:
         def _afiseaza_categorie(titlu: str, selectii: list, culoare: str = "🟢"):
             st.markdown(f"#### {culoare} {titlu}")
             if not selectii:
-                st.caption("Niciun meci gasit pentru aceasta categorie, cu criteriile curente.")
+                st.caption("Niciun meci gasit pentru aceasta categorie.")
                 return
             cota_totala = 1.0
             for s in selectii:
@@ -449,34 +291,11 @@ with tab_scanner:
         _afiseaza_categorie("Gazdele sau oaspeții marchează", bilete["scor_echipe"], "🟡")
         _afiseaza_categorie("GG (ambele echipe marchează)", bilete["gg"], "🟣")
 
-        toate = bilete["sigur"] + bilete["goluri"] + bilete["scor_echipe"] + bilete["gg"]
-        if toate:
-            cota_generala = 1.0
-            for s in toate:
-                cota_generala *= s.cota
-            st.divider()
-            st.markdown(f"### 💰 Cotă totală bilet complet ({len(toate)} selecții): **{cota_generala:.2f}**")
-
 # ═══════════════════════════════════════════════════════════════════════
-# TAB 3 — DESPRE
+# TAB 4 — DESPRE
 # ═══════════════════════════════════════════════════════════════════════
 with tab_despre:
     st.markdown("""
     ### Despre Miliardarul
-
-    Aplicatie personala de analiza a meciurilor de fotbal, construita pe doua motoare:
-
-    - **Motor principal** — Poisson + Dixon-Coles, portat din sistemul Excel:
-      decay exponential pe istoric, shrinkage Bayesian pentru esantioane mici,
-      reconciliere λ/μ, corectie Dixon-Coles pentru scoruri mici, scanner de piete
-      care calculeaza fiecare piata direct din matricea de scor (nu prin inmultire
-      naiva de cote).
-    - **Semnal secundar** — un model RandomForest antrenat pe statistici reale
-      (xG, sut-uri, cornere), folosit doar ca a doua parere.
-
-    Fara date inventate, niciodata — daca o statistica nu exista, campul ramane gol
-    in loc sa fie completat cu o valoare default.
-
-    ---
-    *Uz personal. Nu constituie sfat financiar.*
+    Aplicatie personala de analiza a meciurilor de fotbal.
     """)
