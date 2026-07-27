@@ -1,0 +1,31 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+import joblib
+
+df = pd.read_csv("scores24.csv")
+
+df["target"] = df.apply(
+    lambda r: 0 if r["goals_home"] > r["goals_away"] else
+              1 if r["goals_home"] == r["goals_away"] else
+              2,
+    axis=1
+)
+
+FEATURES = [
+    "shots_home", "shots_away",
+    "shots_on_target_home", "shots_on_target_away",
+    "xG_home", "xG_away",
+    "corners_home", "corners_away",
+    "form_home", "form_away",
+    "league_strength"
+]
+
+X = df[FEATURES]
+y = df["target"]
+
+model = RandomForestClassifier(n_estimators=300, random_state=42)
+model.fit(X, y)
+
+joblib.dump(model, "model_1x2.joblib")
+print("✅ Model salvat cu scikit-learn 1.5.1")
