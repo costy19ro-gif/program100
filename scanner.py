@@ -3,10 +3,6 @@ Scanner automat de meciuri viitoare
 ====================================
 Gaseste meciuri din urmatoarele N zile si calculeaza cotele/probabilitatile
 folosind motorul Poisson din pipeline.py.
-
-Noua arhitectura:
-- RapidAPI scaneaza pe date (meciuri_interval), acoperind automat toate ligile.
-- football-data.org scaneaza pe competitii specifice.
 """
 
 from __future__ import annotations
@@ -113,8 +109,8 @@ def scaneaza(
             if not h_id or not a_id:
                 continue
 
-            hist_h = fdo.af.istoric_echipa_din_liga(meciuri, h_id)
-            hist_a = fdo.af.istoric_echipa_din_liga(meciuri, a_id)
+            hist_h = data_source.istoric_echipa_din_liga(meciuri, h_id)
+            hist_a = data_source.istoric_echipa_din_liga(meciuri, a_id)
 
             if len(hist_h) < 3 or len(hist_a) < 3:
                 continue
