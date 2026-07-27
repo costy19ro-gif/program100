@@ -85,22 +85,41 @@ def meciuri_pe_data(zi: date) -> list[dict]:
 def meciuri_pe_data_toate_ligile(zi: date) -> list[dict]:
     """
     Foloseste endpoint-ul global football-get-matches-by-date-and-league fara
-    leagueid, care intoarce TOATE meciurile zilei din toate ligile active,
-    grupate pe ligi, folosind ID-urile mici/de istoric de liga.
+    leagueid, care intoarce TOATE meciurile zilei din toate ligile active.
     """
-    raw = _get_client().get(
-        "football-get-matches-by-date-and-league", {"date": zi.strftime("%Y%m%d")}
-    )
-    if raw.get("status") != "success":
-        raise RuntimeError(f"API-ul a raspuns neasteptat: {raw}")
+    try:
+        raw = _get_client().get(
+            "football-get-matches-by-date-and-league", {"date": zi.strftime("%Y%m%d")}
+        )
+    except Exception as e:
+        print(f"Eroare API la data {zi}: {e}")
+        return []
 
-    leagues_data = raw.get("response", {}).get("leagues", [])
+    # Verificare de siguranta pentru sa nu crape cu AttributeError
+    if not isinstance(raw, dict) or raw.get("status") != "success":
+        return []
+
+    response_data = raw.get("response")
+    if not isinstance(response_data, dict):
+        return []
+
+    leagues_data = response_data.get("leagues", [])
+    if not isinstance(leagues_data, list):
+        return []
+
     meciuri = []
     for l_item in leagues_data:
+        if not isinstance(l_item, dict):
+            continue
         league_id = l_item.get("id")
         matches = l_item.get("matches", [])
+        if not isinstance(matches, list):
+            continue
+
         for m in matches:
-            status = m.get("status", {})
+            if not isinstance(m, dict):
+                continue
+            status = m.get("status", {}) or {}
             utc = status.get("utcTime")
             data_meci = zi
             if utc:
@@ -109,7 +128,8 @@ def meciuri_pe_data_toate_ligile(zi: date) -> list[dict]:
                 except ValueError:
                     data_meci = zi
 
-            home, away = m.get("home", {}), m.get("away", {})
+            home = m.get("home", {}) or {}
+            away = m.get("away", {}) or {}
             meciuri.append({
                 "fixture_id": m.get("id"),
                 "league_id": league_id,
@@ -121,11 +141,10 @@ def meciuri_pe_data_toate_ligile(zi: date) -> list[dict]:
                 "gol_gazda": home.get("score"),
                 "gol_oaspete": away.get("score"),
                 "scor": status.get("scoreStr"),
-                "status": status.get("reason", {}).get("short"),
+                "status": status.get("reason", {}).get("short") if isinstance(status.get("reason"), dict) else None,
                 "terminat": bool(status.get("finished", False)),
             })
     return meciuri
-
 
 def meciuri_interval(data_start: date, data_end: date) -> list[dict]:
     """Extrage toate meciurile dintr-un interval de date (zi cu zi)."""
