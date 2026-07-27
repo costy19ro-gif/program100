@@ -31,15 +31,11 @@ raspuns real, nu presupusa):
 
 Important: parametrul `date` la acest endpoint e in format YYYYMMDD
 (ex. "20241107"), NU "YYYY-MM-DD" ca la API-Football clasic.
-
-Nu exista (inca) un endpoint confirmat pentru "ultimele N meciuri ale unei
-echipe" — vezi istoric_echipa() mai jos, care ridica explicit o eroare in
-loc sa ghiceasca un format si sa arda cota gratuita.
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from api_client import RapidAPIClient
 from pipeline import MeciIstoric
@@ -86,19 +82,68 @@ def meciuri_pe_data(zi: date) -> list[dict]:
     return meciuri
 
 
+def meciuri_pe_data_toate_ligile(zi: date) -> list[dict]:
+    """
+    Foloseste endpoint-ul global football-get-matches-by-date-and-league fara
+    leagueid, care intoarce TOATE meciurile zilei din toate ligile active,
+    grupate pe ligi, folosind ID-urile mici/de istoric de liga.
+    """
+    raw = _get_client().get(
+        "football-get-matches-by-date-and-league", {"date": zi.strftime("%Y%m%d")}
+    )
+    if raw.get("status") != "success":
+        raise RuntimeError(f"API-ul a raspuns neasteptat: {raw}")
+
+    leagues_data = raw.get("response", {}).get("leagues", [])
+    meciuri = []
+    for l_item in leagues_data:
+        league_id = l_item.get("id")
+        matches = l_item.get("matches", [])
+        for m in matches:
+            status = m.get("status", {})
+            utc = status.get("utcTime")
+            data_meci = zi
+            if utc:
+                try:
+                    data_meci = datetime.fromisoformat(utc.replace("Z", "+00:00")).date()
+                except ValueError:
+                    data_meci = zi
+
+            home, away = m.get("home", {}), m.get("away", {})
+            meciuri.append({
+                "fixture_id": m.get("id"),
+                "league_id": league_id,
+                "data": data_meci,
+                "echipa_gazda": home.get("name"),
+                "echipa_gazda_id": str(home.get("id")),
+                "echipa_oaspete": away.get("name"),
+                "echipa_oaspete_id": str(away.get("id")),
+                "gol_gazda": home.get("score"),
+                "gol_oaspete": away.get("score"),
+                "scor": status.get("scoreStr"),
+                "status": status.get("reason", {}).get("short"),
+                "terminat": bool(status.get("finished", False)),
+            })
+    return meciuri
+
+
+def meciuri_interval(data_start: date, data_end: date) -> list[dict]:
+    """Extrage toate meciurile dintr-un interval de date (zi cu zi)."""
+    toate = []
+    curr = data_start
+    while curr <= data_end:
+        toate.extend(meciuri_pe_data_toate_ligile(curr))
+        curr += timedelta(days=1)
+    return toate
+
+
 def meciuri_azi() -> list[dict]:
     """Meciurile de azi (nume pastrat pentru compatibilitate cu data_source.py)."""
     return meciuri_pe_data(date.today())
 
 
 def istoric_echipa(team_id: int, n_meciuri: int = 20):
-    """
-    DEPRECAT — pastrat doar ca sa nu sparga apeluri vechi. Foloseste in
-    schimb meciuri_liga() + istoric_echipa_din_liga(), care functioneaza
-    (vezi mai jos) — endpoint-ul de istoric direct per echipa nu a fost
-    gasit in acest API, dar am gasit ceva mai bun: toate meciurile unei
-    ligi, dintr-un singur apel, din care extragem istoricul local.
-    """
+    """DEPRECAT — pastrat doar ca sa nu sparga apeluri vechi."""
     raise RuntimeError(
         "istoric_echipa() e deprecat. Foloseste meciuri_liga(league_id) + "
         "istoric_echipa_din_liga(meciuri, team_id)."
@@ -106,15 +151,7 @@ def istoric_echipa(team_id: int, n_meciuri: int = 20):
 
 
 def leagues_cu_tari() -> list[dict]:
-    """
-    Toate tarile + ligile lor, cu ID-urile folosite de meciuri_liga().
-    ATENTIE: acest sistem de ID-uri (mici, ex. 42, 894202... nu, gresit —
-    ex. 42, 260, 516) e DIFERIT de leagueId-urile mari din meciuri_pe_data()
-    (ex. 894202). Nu le amesteca — foloseste ID-urile de aici DOAR cu
-    meciuri_liga(), niciodata cu meciuri_pe_data().
-
-    Un singur apel, cache 6h (vezi api_client.py) — practic gratuit.
-    """
+    """Toate tarile + ligile lor, cu ID-urile folosite de meciuri_liga()."""
     raw = _get_client().get("football-get-all-leagues-with-countries")
     if raw.get("status") != "success":
         raise RuntimeError(f"API-ul a raspuns neasteptat la lista de ligi: {raw}")
@@ -122,12 +159,7 @@ def leagues_cu_tari() -> list[dict]:
 
 
 def meciuri_liga(league_id: int) -> list[dict]:
-    """
-    Toate meciurile disponibile pentru o liga (sezonul curent/recent),
-    dintr-un singur apel. Sursa atat pentru afisare cat si pentru
-    istoric_echipa_din_liga() de mai jos — evita sa consumam cota
-    gratuita cu un apel separat per echipa.
-    """
+    """Toate meciurile disponibile pentru o liga (sezonul curent/recent)."""
     raw = _get_client().get(
         "football-get-all-matches-by-league", {"leagueid": league_id}
     )
@@ -166,11 +198,7 @@ def meciuri_liga(league_id: int) -> list[dict]:
 def istoric_echipa_din_liga(
     meciuri: list[dict], team_id: str, n_meciuri: int = 20
 ) -> list[MeciIstoric]:
-    """
-    Extrage istoricul unei echipe DIN datele deja aduse de meciuri_liga()
-    — functie pura, fara retea. team_id trebuie sa fie exact cel intors
-    de meciuri_liga() (string).
-    """
+    """Extrage istoricul unei echipe din lista de meciuri transmisa."""
     team_id = str(team_id)
     istoric = []
     for m in meciuri:
@@ -197,5 +225,4 @@ def istoric_echipa_din_liga(
 
 
 def predictie_oficiala(fixture_id: int) -> dict | None:
-    """Nu exista echivalent confirmat la acest API — bonus dezactivat."""
     return None
