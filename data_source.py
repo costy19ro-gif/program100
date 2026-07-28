@@ -72,33 +72,32 @@ def meciuri_liga(league_id):
         else:
             raise e
 
-def _incarca_meciuri_din_soccerdata(league_id, season="25-26"):
+def _incarca_meciuri_din_soccerdata(league_id, season="24-25"):
     """
-    Funcție ajutătoare care face scraping pe FBref prin soccerdata și 
-    formatează rezultatele exact așa cum le așteaptă pipeline.py și app.py.
+    Descarcă meciurile dintr-un anumit sezon (ex: '24-25' sau '23-24') 
+    folosind pachetul soccerdata (sursa FBref).
     """
     try:
-        # Inițiază scraper-ul pentru liga respectivă
+        # soccerdata acceptă formate ca '24-25' sau '2024-2025'
         fbref = sd.FBref(leagues=league_id, seasons=season)
         schedule_df = fbref.read_schedule().reset_index()
         
         meciuri_formatate = []
         for idx, row in schedule_df.iterrows():
-            # Construim structura de dicționar pe care o citește bucla ta din app.py (Liniile 85-90)
             meciuri_formatate.append({
                 "echipa_gazda": row['home_team'],
-                "echipa_gazda_id": row['home_team'],  # Folosim numele ca ID în fallback
+                "echipa_gazda_id": row['home_team'],  # ID-ul devine numele echipei pentru aliniere text
                 "echipa_oaspete": row['away_team'],
                 "echipa_oaspete_id": row['away_team'],
-                "goals_home": row['home_score'] if pd.notna(row['home_score']) else None,
-                "goals_away": row['away_score'] if pd.notna(row['away_score']) else None,
+                # Conversie sigură în float/int pentru scoruri istorice
+                "goals_home": int(row['home_score']) if pd.notna(row['home_score']) else None,
+                "goals_away": int(row['away_score']) if pd.notna(row['away_score']) else None,
                 "status": "Match Finished" if pd.notna(row['home_score']) else "Not Started"
             })
         return meciuri_formatate
     except Exception as es:
-        logger.error(f"Eroare critică la scraping-ul SoccerData: {es}")
+        print(f"Eroare la citirea meciurilor istorice prin soccerdata: {es}")
         return []
-
 def istoric_echipa_din_liga(meciuri_liga, echipa_id, n_meciuri):
     """
     Filtrează istoricul meciurilor dintr-o listă deja încărcată.
