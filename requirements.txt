@@ -3,3 +3,4 @@ requests>=2.31
 pandas>=2.0
 scikit-learn==1.5.1
 joblib==1.4.2
+soccerdata
