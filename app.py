@@ -177,7 +177,7 @@ with tab_poisson:
             cota_combo = 1.0
             for p in piete_da:
                 cota_combo *= cota_map[p]
-            st.success(f"**Combo CREMA** ({' + '.join(piete_da)}) — cota combinata: **{cota_combo:.2f}**")
+            st.success(f"**Combo CREMA** — cota combinata: **{cota_combo:.2f}**")
 
 # ═══════════════════════════════════════════════════════════════════════
 # TAB 2 — MODEL RAPID
@@ -240,4 +240,3 @@ with tab_scanner:
 # ═══════════════════════════════════════════════════════════════════════
 with tab_despre:
     st.subheader("ℹ️ Despre proiect")
-    st.markdown("""
