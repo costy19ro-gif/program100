@@ -113,3 +113,15 @@ def istoric_echipa_din_liga(meciuri_liga, echipa_id, n_meciuri):
             
     # Returnează ultimele n meciuri jucate
     return istoric[-n_meciuri:]
+def obtine_status_api():
+    """
+    Verifică starea creditelor pe serverul RapidAPI (API-Football).
+    Returnează un string formatat cu limita curentă.
+    """
+    try:
+        response = af.requests.get(url=af.apifootball_url + "status", headers=af.headers).json()
+        curent = response['response']['requests']['current']
+        limita = response['response']['requests']['limit_day']
+        return f"📊 Credite API folosite azi: {curent} / {limita}"
+    except Exception:
+        return "⚠️ Status API indisponibil (Se rulează pe modul Fallback/SoccerData)"
