@@ -240,3 +240,41 @@ with tab_scanner:
 # ═══════════════════════════════════════════════════════════════════════
 with tab_despre:
     st.subheader("ℹ️ Despre proiect")
+
+# --- COD GRATUIT DE ADĂUGAT ÎN app.py PENTRU GENERARE TEXT ---
+if "ultima_analiza" in st.session_state:
+    meci, rezultat = st.session_state["ultima_analiza"]
+    rec = rezultat["reconciliere"]
+    
+    lam_g = rec['lambda_gazde']
+    mu_o = rec['mu_oaspeti']
+    
+    st.markdown("### 📝 Concluzia Automatizată a Motorului (Gratuit)")
+    
+    # 1. Analiza forței de atac și stilului de joc
+    if lam_g > 2.0 and mu_o > 2.0:
+        stil_joc = "🔥 Se anunță un meci extrem de spectaculos! Ambele echipe au linii de atac devastatoare, existând o probabilitate uriașă de goluri în ambele porți."
+    elif lam_g < 1.0 and mu_o < 1.0:
+        stil_joc = "🛡️ Un meci dominat de tactici defensive. Ambele formații joacă închis, iar numărul total de faze de poartă va fi extrem de redus."
+    else:
+        stil_joc = "⚖️ Un meci echilibrat din punct de vedere tactic, unde controlul de la mijlocul terenului va decide rezultatul final."
+        
+    # 2. Determinarea favoritei brute
+    diferenta = lam_g - mu_o
+    if diferenta > 0.6:
+        favorita = f"📈 **{meci['echipa_gazda']}** pornește ca favorită certă în această confruntare, având un avantaj matematic solid pe teren propriu."
+    elif diferenta < -0.6:
+        favorita = f"📉 **{meci['echipa_oaspete']}** are un avantaj clar în deplasare. Motorul indică o vulnerabilitate majoră în defensiva gazdelor."
+    else:
+        favorita = "🤝 Coeficienții sunt extrem de apropiați. Probabilitatea unei remize sau a unui meci decis la un singur gol diferență este foarte mare."
+
+    # 3. Recomandarea principală de pariu bazată pe matematică
+    piete = rezultat["piete"]
+    # Găsește piața cu cea mai mare probabilitate procentuală
+    cea_mai_sigura_piata = max(piete, key=piete.get)
+    procent_sansa = piete[cea_mai_sigura_piata]
+    
+    recomandare = f"🎯 **Sugestia principală:** Cea mai mare probabilitate calculată de algoritm este pe piața **[{cea_mai_sigura_piata}]**, cu o șansă teoretică de **{procent_sansa:.1%}**."
+
+    # Afișarea casetei cu textul generat instant și gratuit
+    st.info(f"{stil_joc}\n\n{favorita}\n\n{recomandare}")
