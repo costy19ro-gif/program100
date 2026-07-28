@@ -1,55 +1,68 @@
-"""
-Sursa de date reale — orchestreaza API-Football si predictiile bonus.
-"""
+import pandas as pd
+import soccerdata as sd
+import logging
+# Importă funcțiile tale curente din api_football
+import api_football as af 
 
-from __future__ import annotations
+logger = logging.getLogger(__name__)
 
-from datetime import date
-import api_football as af
-import rapidapi_predictions as rp
-from pipeline import MeciIstoric
+def obtine_meciuri_zi_fallback(league="ENG-Premier League", season="24-25"):
+    """
+    Încearcă să aducă meciurile zilei din API-Football (RapidAPI).
+    Dacă limita zilnică a expirat, comută automat pe soccerdata (FBref).
+    """
+    try:
+        logger.info("Se încearcă preluarea datelor din API-Football...")
+        # Apelul tău original către API-ul bazat pe cheie token
+        meciuri = af.meciuri_azi() 
+        return meciuri
+        
+    except Exception as e:
+        # Prinde eroarea de „Quota Exceeded” sau orice problemă de rețea RapidAPI
+        if "quota" in str(e).lower() or "429" in str(e):
+            logger.warning("Cota zilnică RapidAPI a fost depășită! Se activează fallback-ul pe SoccerData (FBref)...")
+            return _incarca_date_din_soccerdata(league, season)
+        else:
+            # Dacă este altă eroare (ex: sintaxă), o dă mai departe
+            raise e
 
+def _incarca_date_din_soccerdata(league, season):
+    """
+    Funcție internă care folosește web scraping prin soccerdata ca soluție gratuită.
+    """
+    try:
+        # Inițializează scraper-ul FBref pentru liga și sezonul curent
+        # Exemplu format ligi în soccerdata: 'ENG-Premier League', 'ITA-Serie A', 'ESP-La Liga'
+        fbref = sd.FBref(leagues=league, seasons=season)
+        
+        # Deschide programul/meciurile (read_schedule returnează un Pandas DataFrame)
+        schedule_df = fbref.read_schedule()
+        
+        # Filtrează doar meciurile de azi (FBref oferă tot sezonul, deci le filtrăm local)
+        azi = pd.Timestamp.now().strftime('%Y-%m-%d')
+        
+        # Resetăm indexul pentru a manipula coloanele mai ușor în Streamlit
+        schedule_df = schedule_df.reset_index()
+        
+        meciuri_azi = schedule_df[schedule_df['date'] == azi]
+        
+        if meciuri_azi.empty:
+            logger.info(f"Niciun meci programat azi în {league} conform FBref.")
+            return []
+            
+        # Aliniem structura DataFrame-ului la formatul pe care app.py îl așteaptă deja
+        # Înlocuiește cheile de mai jos cu structura exactă folosită în interfața ta Streamlit
+        meciuri_formatate = []
+        for _, row in meciuri_azi.iterrows():
+            meciuri_formatate.append({
+                "home_team": row['home_team'],
+                "away_team": row['away_team'],
+                "status": "Programat",
+                "sursa": "SoccerData (Fallback)"
+            })
+            
+        return meciuri_formatate
 
-def meciuri_azi() -> list[dict]:
-    """Meciurile programate azi (sursa: API-Football)."""
-    return af.meciuri_azi()
-
-
-def meciuri_pe_data_toate_ligile(zi: date) -> list[dict]:
-    """Meciurile dintr-o zi din toate ligile (API-Football)."""
-    return af.meciuri_pe_data_toate_ligile(zi)
-
-
-def meciuri_interval(data_start: date, data_end: date) -> list[dict]:
-    """Meciurile dintr-un interval de date (API-Football)."""
-    return af.meciuri_interval(data_start, data_end)
-
-
-def istoric_echipa(team_id: int, n_meciuri: int = 20) -> list[MeciIstoric]:
-    """Ultimele n_meciuri TERMINATE ale unei echipe."""
-    return af.istoric_echipa(team_id, n_meciuri)
-
-
-def predictie_oficiala(fixture_id: int) -> dict | None:
-    """Bonus: predictia proprie API-Football pentru acest meci."""
-    return af.predictie_oficiala(fixture_id)
-
-
-def leagues_cu_tari() -> list[dict]:
-    """Toate tarile + ligile lor (sistem de ID-uri pt. meciuri_liga)."""
-    return af.leagues_cu_tari()
-
-
-def meciuri_liga(league_id: int) -> list[dict]:
-    """Toate meciurile unei ligi, un singur apel."""
-    return af.meciuri_liga(league_id)
-
-
-def istoric_echipa_din_liga(meciuri: list[dict], team_id: str, n_meciuri: int = 20):
-    """Istoricul unei echipe, extras local (fara retea)."""
-    return af.istoric_echipa_din_liga(meciuri, team_id, n_meciuri)
-
-
-def predictii_bonus_rapidapi(params: dict | None = None) -> list[dict] | None:
-    """Bonus: predictiile RapidAPI/tipstar."""
-    return rp.predictii_bonus(params)
+    except Exception as sd_error:
+        logger.error(f"A eșuat și fallback-ul pe SoccerData: {sd_error}")
+        return []
