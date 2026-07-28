@@ -299,3 +299,32 @@ with tab_despre:
     ### Despre Miliardarul
     Aplicatie personala de analiza a meciurilor de fotbal.
     """)
+# --- COD DE ADĂUGAT ÎN app.py ---
+if not chei_filtrate:
+    st.warning(f"Nimic gasit pentru '{filtru}'.")
+    league_id = None
+else:
+    eticheta_aleasa = st.selectbox("Liga", chei_filtrate, key="select_liga")
+    league_id = optiuni_liga[eticheta_aleasa]
+    
+    # Adăugăm un selector de sezon pentru flexibilitate totală în pauzele competiționale
+    sezon_ales = st.selectbox(
+        "📅 Sezon (utilizat pentru fallback / istorice)", 
+        ["2025-2026", "2024-2025", "2023-2024", "2022-2023"], 
+        index=1 # Pune automat pe 2024-2025 ca să ai date complete de analizat în pauze
+    )
+    # Convertim formatul (ex: din '2024-2025' în '24-25' scurt, cerut de soccerdata)
+    format_sezon = f"{sezon_ales[2:4]}-{sezon_ales[7:9]}"
+
+if league_id and st.button("📥 Incarca meciurile acestei ligi", key="btn_meciuri_liga"):
+    try:
+        with st.spinner("Se incarca meciurile..."):
+            # Trimitem și sezonul ales către data_source
+            if isinstance(league_id, str) and "-" in league_id:
+                st.session_state["meciuri_liga"] = data_source._incarca_meciuri_din_soccerdata(league_id, season=format_sezon)
+            else:
+                st.session_state["meciuri_liga"] = data_source.meciuri_liga(league_id)
+                
+            st.session_state["liga_curenta"] = f"{eticheta_aleasa} ({sezon_ales})"
+    except RuntimeError as e:
+        st.error(str(e))
