@@ -81,7 +81,6 @@ with tab_poisson:
             eticheta_aleasa = st.selectbox("Liga", chei_filtrate, key="select_liga")
             league_id = optiuni_liga[eticheta_aleasa]
             
-            # Corectat si integrat: Selector pentru sezoane istorice / pauza competitionala
             sezon_ales = st.selectbox(
                 "📅 Sezon (utilizat pentru fallback / istorice)", 
                 ["2025-2026", "2024-2025", "2023-2024", "2022-2023"], 
@@ -92,7 +91,6 @@ with tab_poisson:
         if league_id and st.button("📥 Incarca meciurile acestei ligi", key="btn_meciuri_liga"):
             try:
                 with st.spinner("Se incarca meciurile ligii..."):
-                    # Verifica tipul de ID pentru a gestiona fallback-ul catre soccerdata
                     if isinstance(league_id, str) and "-" in league_id:
                         st.session_state["meciuri_liga"] = data_source._incarca_meciuri_din_soccerdata(league_id, season=format_sezon)
                     else:
@@ -163,7 +161,7 @@ with tab_poisson:
         c2.metric("μ (goluri asteptate oaspeti)", f"{rec['mu_oaspeti']:.2f}")
 
         st.markdown("#### Piete (probabilitate reala)")
-        piete = joke = rezultat["piete"]
+        piete = rezultat["piete"]
         df_piete = pd.DataFrame([
             {"Piata": k, "Probabilitate": f"{v:.1%}", "Cota corecta": f"{(1 / v):.2f}" if v > 0 else "—"}
             for k, v in piete.items()
@@ -182,7 +180,7 @@ with tab_poisson:
             st.success(f"**Combo CREMA** ({' + '.join(piete_da)}) — cota combinata: **{cota_combo:.2f}**")
 
 # ═══════════════════════════════════════════════════════════════════════
-# TAB 2 — MODEL RAPID (RANDOM FOREST)
+# TAB 2 — MODEL RAPID
 # ═══════════════════════════════════════════════════════════════════════
 with tab_rapid:
     st.subheader("Model rapid — cote + RandomForest")
@@ -209,7 +207,7 @@ with tab_rapid:
     cols = st.columns(3)
     valori = {}
     for i, feat in enumerate(FEATURES_1X2):
-        valori[feat] = cols[i % 3].number_input(feat, value=0.0 if "strength" in feat or "form" in feat else 0.0, step=0.1, format="%.2f")
+        valori[feat] = cols[i % 3].number_input(feat, value=0.0, step=0.1, format="%.2f")
 
     odd_1 = st.number_input("Cota 1", min_value=1.01, value=2.00, step=0.01)
     odd_X = st.number_input("Cota X", min_value=1.01, value=3.30, step=0.01)
@@ -218,7 +216,6 @@ with tab_rapid:
     if st.button("🎯 Ruleaza modelul rapid", key="btn_run_rf"):
         if model_1x2 is not None:
             try:
-                # Transforma valorile introduse intr-un format citit de model
                 X_nou = pd.DataFrame([valori])
                 pred_proaspat = model_1x2.predict_proba(X_nou)[0]
                 
@@ -232,6 +229,15 @@ with tab_rapid:
             st.error("Modelul RandomForest (.joblib) nu este incarcat.")
 
 # ═══════════════════════════════════════════════════════════════════════
-# TAB 3 SI 4 — SCANNER SI DESPRE (STUB / STRUCTURA SALVATA)
+# TAB 3 — SCANNER
 # ═══════════════════════════════════════════════════════════════════════
 with tab_scanner:
+    st.subheader("🎰 Scanner Bilete")
+    st.info("Modul dedicat pentru scanarea si verificarea automata a pietelor active.")
+
+# ═══════════════════════════════════════════════════════════════════════
+# TAB 4 — DESPRE
+# ═══════════════════════════════════════════════════════════════════════
+with tab_despre:
+    st.subheader("ℹ️ Despre proiect")
+    st.markdown("""
