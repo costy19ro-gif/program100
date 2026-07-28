@@ -29,3 +29,23 @@ model.fit(X, y)
 
 joblib.dump(model, "model_1x2.joblib")
 print("✅ Model salvat cu scikit-learn 1.5.1")
+
+def obtine_statistici_avansate_echipa(league, season, team_name):
+    """
+    Extrage xG, șuturi și alte metrici avansate direct de pe site-urile de profil.
+    """
+    try:
+        # Folosim Understat sau FBref deoarece au metrici de tip Expected Goals (xG)
+        understat = sd.Understat(leagues=league, seasons=season)
+        
+        # Citește statisticile meciurilor disputate de echipe
+        stats_df = understat.read_team_match_stats()
+        
+        # Filtrează datele pentru echipa dorită
+        team_stats = stats_df.xs(team_name, level="team")
+        
+        # Returnează ultimele meciuri pentru a calcula formele (xG mediu, șuturi pe poartă medii)
+        return team_stats.tail(5)
+    except Exception as e:
+        logger.error(f"Nu s-au putut prelua statisticile xG: {e}")
+        return None
